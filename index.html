@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title></title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const brickWidthRatio = 7.5;
+    const brickHeightRatio = 4;
+    const gapRatio = 0.5;
+
+    let brickWidth, brickHeight, gap;
+    let cols, rows;
+    let bricks = [];
+    let balls = [];
+    let randomness = 0;
+    let currentRowIndex = 0;
+
+    function calculateDimensions() {
+      gap = (gapRatio / 100) * canvas.width;
+      cols = Math.floor((canvas.width + gap) / (brickWidthRatio / 100 * canvas.width + gap));
+      brickWidth = (canvas.width - gap * (cols - 1)) / cols;
+      brickHeight = (brickHeightRatio / 100) * canvas.height;
+      rows = Math.floor(canvas.height / (brickHeight + gap)) / 2;
+    }
+
+    canvas.addEventListener('click', (event) => {
+      const mouseX = event.clientX;
+      const mouseY = event.clientY;
+
+      for (let i = bricks.length - 1; i >= 0; i--) {
+        const brick = bricks[i];
+        if (
+          mouseX >= brick.x &&
+          mouseX <= brick.x + brick.width &&
+          mouseY >= brick.y &&
+          mouseY <= brick.y + brick.height
+        ) {
+          bricks.splice(i, 1);
+
+          // 벽돌을 부술 때 공들이 폭발적으로 휘날림
+          for (let j = 0; j < 7; j++) { // 공의 개수를 증가 (10개)
+            balls.push({
+              x: brick.x + Math.random() * brick.width,
+              y: brick.y + Math.random() * brick.height,
+              radius: (Math.random() * 5 + 3) * 5,
+              dx: (Math.random() - 0.5) * 10, // 초기 속도 증가 (폭발 효과)
+              dy: (Math.random() - 0.8) * 10, // 초기 속도 증가 (폭발 효과)
+            });
+          }
+          break;
+        }
+      }
+    });
+
+    function updateBalls() {
+      for (const ball of balls) {
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+
+        // 중력 적용
+        ball.dy += 0.2;
+
+        // 벽에 닿으면 반사
+        if (ball.x - ball.radius <= 0 || ball.x + ball.radius >= canvas.width) {
+          ball.dx *= -0.8; // 반사 속도 감소
+          ball.x = Math.max(ball.radius, Math.min(ball.x, canvas.width - ball.radius));
+        }
+
+        // 바닥에 닿으면 속도 감소 및 멈춤
+        if (ball.y + ball.radius >= canvas.height) {
+          ball.y = canvas.height - ball.radius;
+          ball.dy *= -0.5; // 반사 속도 감소
+          if (Math.abs(ball.dy) < 0.5) {
+            ball.dy = 0;
+            ball.dx *= 0.9; // 마찰 효과
+          }
+        }
+
+        // 공끼리 충돌 처리
+        for (const otherBall of balls) {
+          if (ball === otherBall) continue;
+
+          const dx = ball.x - otherBall.x;
+          const dy = ball.y - otherBall.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < ball.radius + otherBall.radius) {
+            const angle = Math.atan2(dy, dx);
+            const overlap = ball.radius + otherBall.radius - distance;
+
+            ball.x += Math.cos(angle) * overlap / 2;
+            ball.y += Math.sin(angle) * overlap / 2;
+
+            otherBall.x -= Math.cos(angle) * overlap / 2;
+            otherBall.y -= Math.sin(angle) * overlap / 2;
+
+            const velocityX = ball.dx - otherBall.dx;
+            const velocityY = ball.dy - otherBall.dy;
+            const collisionScale = (velocityX * dx + velocityY * dy) / (distance * distance);
+            const collisionX = collisionScale * dx;
+            const collisionY = collisionScale * dy;
+
+            ball.dx -= collisionX;
+            ball.dy -= collisionY;
+
+            otherBall.dx += collisionX;
+            otherBall.dy += collisionY;
+          }
+        }
+      }
+    }
+
+    function createRow(yOffset, rowIndex) {
+      const newRow = [];
+      for (let col = 0; col < cols; col++) {
+        const baseClipX = (col / cols) * video.videoWidth;
+        const baseClipY = ((rowIndex % rows) / rows) * video.videoHeight;
+
+        newRow.push({
+          x: col * (brickWidth + gap),
+          y: yOffset,
+          width: brickWidth,
+          height: brickHeight,
+          clipX: baseClipX + randomness * Math.random() * video.videoWidth,
+          clipY: baseClipY + randomness * Math.random() * video.videoHeight,
+          clipWidth: video.videoWidth / cols,
+          clipHeight: video.videoHeight / rows,
+        });
+      }
+      return newRow;
+    }
+
+    function initializeBricks() {
+      bricks = [];
+      for (let row = 0; row < rows; row++) {
+        bricks = bricks.concat(createRow(row * (brickHeight + gap), row));
+      }
+    }
+
+    function addRow() {
+      bricks.forEach((brick) => {
+        brick.y += brickHeight + gap;
+      });
+
+      bricks = createRow(0, currentRowIndex).concat(bricks);
+
+      bricks = bricks.filter((brick) => brick.y < canvas.height);
+      currentRowIndex = (currentRowIndex + 1) % rows;
+
+      // 랜덤성 증가
+      randomness = Math.min(randomness + 0.05, 1); // 점진적으로 증가, 최대 1
+    }
+
+
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+
+    navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then((stream) => {
+        video.srcObject = stream;
+        video.addEventListener('loadeddata', () => {
+          calculateDimensions();
+          initializeBricks();
+          setInterval(addRow, 3000);
+          render();
+        });
+      })
+      .catch((err) => {
+        console.error('Webcam access denied:', err);
+      });
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (const brick of bricks) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(brick.x, brick.y, brick.width, brick.height);
+        ctx.closePath();
+        ctx.clip();
+
+        ctx.drawImage(
+          video,
+          brick.clipX % video.videoWidth,
+          brick.clipY % video.videoHeight,
+          brick.clipWidth,
+          brick.clipHeight,
+          brick.x,
+          brick.y,
+          brick.width,
+          brick.height
+        );
+
+        ctx.restore();
+      }
+
+      for (const ball of balls) {
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        ctx.closePath();
+      }
+
+      updateBalls();
+      requestAnimationFrame(render);
+    }
+
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      calculateDimensions();
+      initializeBricks();
+    });
+  </script>
+</body>
+</html>
